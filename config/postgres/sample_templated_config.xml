@@ -10,15 +10,14 @@
     <isolation>TRANSACTION_SERIALIZABLE</isolation>
     <batchsize>128</batchsize>
 
-    <anon>
-        <tablename>pytest</tablename>
-        <droppable>c_id</droppable>
-        <categorical>c_gender,c_type</categorical>
-        <continuous>c_rand</continuous>
-        <ordinal></ordinal>
-        <eps>1.5</eps>
-        <preEps>0.7</preEps>
-    </anon>
+    <anon>true</anon>
+    <tablename>pytest</tablename>
+    <droppable>c_id</droppable>
+    <categorical>c_gender,c_type</categorical>
+    <continuous>c_rand</continuous>
+    <ordinal></ordinal>
+    <eps>1.5</eps>
+    <preEps>0.7</preEps>
     
     <query_templates_file>data/templated/example.xml</query_templates_file>
 

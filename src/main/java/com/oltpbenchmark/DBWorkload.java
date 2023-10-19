@@ -212,7 +212,10 @@ public class DBWorkload {
                     Process process = processBuilder.start();
 
                     int exitCode = process.waitFor();
-                    System.out.println("Exited with error code : " + exitCode);
+                    if (exitCode != 0) {
+                        throw new Exception("Program exited with a non-zero status code");
+                    }
+
                     LOG.info("Finished the Anonymization process");
                     LOG.info(SINGLE_LINE);
 
