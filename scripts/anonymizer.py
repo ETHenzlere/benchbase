@@ -41,7 +41,16 @@ def getJar(url):
 
 
 def splitString(longString):
-    return [] if longString == "-" else [i for i in longString.split(",")]
+    return [] if longString == "" else [i for i in longString.split(",")]
+
+
+def getDroppableInfo(dropCols, dataset):
+    savedColumns = dataset[dropCols]
+    savedColumnsIndexes = []
+
+    for col in dropCols:
+        savedColumnsIndexes.append(dataset.columns.get_loc(col))
+    return savedColumns, savedColumnsIndexes
 
 
 def synthesize(
@@ -69,13 +78,11 @@ def synthesize(
 
     dataset = dfFromTable(curs, table)
 
-    savedColumns = dataset[dropCols]
+    savedColumns = []
     savedColumnsIndexes = []
-
-    for col in dropCols:
-        savedColumnsIndexes.append(dataset.columns.get_loc())
-
-    dataset = dataset.drop(dataset[savedColumns], axis=1)
+    if dropCols:
+        savedColumns, savedColumnsIndexes = getDroppableInfo(dropCols, dataset)
+        dataset = dataset.drop(dropCols, axis=1)
 
     synth = Synthesizer.create("mst", epsilon=eps, verbose=True)
 
@@ -91,8 +98,12 @@ def synthesize(
     synthFrame = pd.DataFrame(sample)
 
     # Stitching the Frame back to its original form
-    for ind in range(len(dropCols)):
-        synthFrame.insert(savedColumnsIndexes[ind], dropCols[ind], savedColumns[ind])
+    if dropCols:
+        for ind in range(len(dropCols)):
+            columnName = dropCols[ind]
+            synthFrame.insert(
+                savedColumnsIndexes[ind], columnName, savedColumns[columnName]
+            )
 
     print(synthFrame.describe(include="all"))
 
@@ -148,6 +159,9 @@ def main():
 
     ordList = sys.argv[11]
     ordinal = splitString(ordList)
+
+    print("The following columns will be saved: ")
+    print(columnsToSave)
 
     synthesize(
         driver,

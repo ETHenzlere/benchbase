@@ -174,7 +174,8 @@ public class TemplatedBenchmark extends BenchmarkModule {
                 ImmutableParsedQueryTemplate.Builder b = ImmutableParsedQueryTemplate.builder();
                 b.name(template.getName());
 
-                if (workConf.getXmlConfig().containsKey("anon") && workConf.getXmlConfig().containsKey("tablename")) {
+                if (workConf.getXmlConfig().containsKey("anon") && workConf.getXmlConfig().getBoolean("anon")
+                        && workConf.getXmlConfig().containsKey("tablename")) {
                     String originalQuery = template.getQuery();
                     String tableName = workConf.getXmlConfig().getString("tablename");
                     b.query(originalQuery.replace(tableName, tableName + "_anonymized"));

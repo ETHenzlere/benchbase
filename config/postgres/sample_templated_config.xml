@@ -12,9 +12,9 @@
 
     <anon>
         <tablename>pytest</tablename>
-        <droppable></droppable>
-        <categorical></categorical>
-        <continuous></continuous>
+        <droppable>c_id</droppable>
+        <categorical>c_gender,c_type</categorical>
+        <continuous>c_rand</continuous>
         <ordinal></ordinal>
         <eps>1.5</eps>
         <preEps>0.7</preEps>

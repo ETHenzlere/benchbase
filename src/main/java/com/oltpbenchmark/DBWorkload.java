@@ -184,6 +184,8 @@ public class DBWorkload {
             // ----------------------------------------------------------------
             boolean flag = xmlConfig.containsKey("anon");
             if (flag) {
+                LOG.info("Starting the Anonymization process");
+                LOG.info(SINGLE_LINE);
                 // Connection Details
                 String driver = xmlConfig.getString("driver");
                 String url = xmlConfig.getString("url");
@@ -194,10 +196,10 @@ public class DBWorkload {
                 String eps = xmlConfig.getString("eps", "1.0");
                 String preprocessorEps = xmlConfig.getString("preEps", "0.5");
                 String tablename = xmlConfig.getString("tablename");
-                String droppableColumns = xmlConfig.getString("droppable", "-");
-                String categoricalColumns = xmlConfig.getString("categorical", "-");
-                String continuousColumns = xmlConfig.getString("continuous", "-");
-                String ordinalColumns = xmlConfig.getString("ordinal", "-");
+                String droppableColumns = xmlConfig.getString("droppable", "");
+                String categoricalColumns = xmlConfig.getString("categorical", "");
+                String continuousColumns = xmlConfig.getString("continuous", "");
+                String ordinalColumns = xmlConfig.getString("ordinal", "");
 
                 ProcessBuilder processBuilder = new ProcessBuilder("python3",
                         "scripts/anonymizer.py", driver, url, username, password, eps, preprocessorEps, tablename,
@@ -206,18 +208,17 @@ public class DBWorkload {
                 try {
                     // Redirect Output stream of the Script to get live feedback
                     processBuilder.inheritIO();
-                    System.out.println("Starting the Anonymization Process");
 
                     Process process = processBuilder.start();
 
                     int exitCode = process.waitFor();
-                    System.out.println("\nExited with error code : " + exitCode);
-                    System.out.println("Finished the Anonymization Process");
+                    System.out.println("Exited with error code : " + exitCode);
+                    LOG.info("Finished the Anonymization process");
+                    LOG.info(SINGLE_LINE);
 
-                } catch (IOException e) {
-                    e.printStackTrace();
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
+                } catch (Exception e) {
+                    LOG.error(e.getMessage());
+                    return;
                 }
             }
 
