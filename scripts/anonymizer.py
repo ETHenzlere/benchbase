@@ -4,6 +4,7 @@ from snsynth import Synthesizer
 import sys
 import re
 import glob
+import numpy as np
 
 
 def dfFromTable(curs, table):
@@ -27,6 +28,7 @@ def dfFromTable(curs, table):
 
 
 def populateAnonFromDF(curs, df, table):
+    df = df.replace(np.nan, None)
     tuples = [tuple(x) for x in df.values]
     colSlots = "({0})".format(",".join("?" for col in df.columns))
     insertSQL = "insert into {0} values {1}".format(table, colSlots)
