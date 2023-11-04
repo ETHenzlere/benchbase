@@ -27,6 +27,8 @@ import javax.xml.transform.stream.StreamSource;
 import javax.xml.validation.Schema;
 import javax.xml.validation.SchemaFactory;
 
+import org.apache.commons.configuration2.HierarchicalConfiguration;
+import org.apache.commons.configuration2.tree.ImmutableNode;
 import org.apache.commons.text.StringEscapeUtils;
 import org.codehaus.commons.compiler.CompilerFactoryFactory;
 import org.codehaus.commons.compiler.ICompilerFactory;
@@ -174,11 +176,17 @@ public class TemplatedBenchmark extends BenchmarkModule {
                 ImmutableParsedQueryTemplate.Builder b = ImmutableParsedQueryTemplate.builder();
                 b.name(template.getName());
 
-                if (workConf.getXmlConfig().containsKey("anon") && workConf.getXmlConfig().getBoolean("anon")
-                        && workConf.getXmlConfig().containsKey("tablename")) {
+                int numTables = workConf.getXmlConfig().configurationsAt("/anon/anonTable").size();
+                if (numTables > 0 && workConf.getXmlConfig().containsKey("tablename")) {
                     String originalQuery = template.getQuery();
-                    String tableName = workConf.getXmlConfig().getString("tablename");
-                    b.query(originalQuery.replace(tableName, tableName + "_anonymized"));
+                    // Replace the occurence of all table names with their anonymized equivalent
+                    for (int i = 1; i < numTables + 1; i++) {
+                        final HierarchicalConfiguration<ImmutableNode> anonConfig = workConf.getXmlConfig()
+                                .configurationAt("anon/anonTable[" + i + "]");
+                        String tableName = anonConfig.getString("tablename");
+                        originalQuery.replace(tableName, tableName + "_anonymized");
+                    }
+                    b.query(originalQuery);
                 } else {
                     b.query(template.getQuery());
                 }
