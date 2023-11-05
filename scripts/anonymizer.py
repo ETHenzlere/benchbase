@@ -2,48 +2,64 @@ import jaydebeapi
 import pandas as pd
 from snsynth import Synthesizer
 import sys
-import re
-import glob
 import numpy as np
+import jpype
+from jpype.types import *
+import jpype.imports
+
+
+def getTimestampColumns(dbTypeList):
+    timestampIndexes = []
+    for i, entry in enumerate(dbTypeList):
+        for dType in entry.values:
+            if dType == "TIMESTAMP":
+                timestampIndexes.append(i)
+    return timestampIndexes
+
+
+def splitString(longString):
+    return [] if longString == "-1" else [i for i in longString.split(",")]
 
 
 def dfFromTable(curs, table):
-    getTableQuery = "SELECT * FROM {0}".format(table)
-    curs.execute(getTableQuery)
+    curs.execute("SELECT * FROM {0}".format(table))
 
     res = curs.fetchall()
     meta = curs.description
 
     cols = []
+    colTypes = []
     for entry in meta:
-        cols.append(entry[0])
+        cols.append(str(entry[0]))
+        colTypes.append(entry[1])
+    timestampIndexes = getTimestampColumns(colTypes)
 
-    print("Extracted Columns:")
-    print(cols)
+    frame = pd.DataFrame(res, columns=cols)
 
-    frame = pd.DataFrame(res)
-    frame.columns = cols
-
-    return frame
+    return frame, timestampIndexes
 
 
-def populateAnonFromDF(curs, df, table):
+def populateAnonFromDF(curs, df, table, timestampIndexes):
     df = df.replace(np.nan, None)
+
+    for ind in timestampIndexes:
+        name = df.columns[ind]
+        df[name] = pd.to_datetime(df[name])
+
     tuples = [tuple(x) for x in df.values]
+
+    if len(timestampIndexes):
+        import java
+
+        for i in range(0, len(tuples)):
+            li = list(tuples[i])
+            for j in timestampIndexes:
+                li[j] = java.sql.Timestamp @ li[j]
+            tuples[i] = tuple(li)
+
     colSlots = "({0})".format(",".join("?" for col in df.columns))
     insertSQL = "insert into {0} values {1}".format(table, colSlots)
     curs.executemany(insertSQL, tuples)
-
-
-def getJar(url):
-    jdbcInfo = re.search(r":(\w+):", url).group(1)
-    jdbcJarPath = glob.glob("lib/{0}*.jar".format(jdbcInfo))[0]
-    print("Found the following Jar: " + jdbcJarPath)
-    return jdbcJarPath
-
-
-def splitString(longString):
-    return [] if longString == "" else [i for i in longString.split(",")]
 
 
 def getDroppableInfo(dropCols, dataset):
@@ -59,7 +75,7 @@ def synthesize(
     driver,
     url,
     username,
-    pw,
+    password,
     eps,
     preEps,
     table,
@@ -68,17 +84,13 @@ def synthesize(
     continuous,
     ordinal,
 ):
-    jar = getJar(url)
-    conn = jaydebeapi.connect(
-        driver,
-        url,
-        [username, pw],
-        jar,
-    )
+    jpype.startJVM(classpath=["benchbase.jar"])
+
+    conn = jaydebeapi.connect(driver, url, [username, password])
 
     curs = conn.cursor()
 
-    dataset = dfFromTable(curs, table)
+    dataset, timestampIndexes = dfFromTable(curs, table)
 
     savedColumns = []
     savedColumnsIndexes = []
@@ -86,16 +98,29 @@ def synthesize(
         savedColumns, savedColumnsIndexes = getDroppableInfo(dropCols, dataset)
         dataset = dataset.drop(dropCols, axis=1)
 
+    nullableFlag = dataset.isnull().values.any()
+
+    synthFrame = pd.DataFrame()
+
     synth = Synthesizer.create("mst", epsilon=eps, verbose=True)
 
-    sample = synth.fit_sample(
-        dataset,
-        preprocessor_eps=preEps,
-        categorical_columns=categorical,
-        continuous_columns=continuous,
-        ordinal_columns=ordinal,
-        nullable=False,
-    )
+    if len(categorical) == 0 and len(continuous) == 0 and len(ordinal) == 0:
+        sample = synth.fit_sample(
+            dataset,
+            preprocessor_eps=preEps,
+            nullable=nullableFlag,
+        )
+        synthFrame = pd.DataFrame(sample)
+    else:
+        sample = synth.fit_sample(
+            dataset,
+            preprocessor_eps=preEps,
+            categorical_columns=categorical,
+            continuous_columns=continuous,
+            ordinal_columns=ordinal,
+            nullable=nullableFlag,
+        )
+        synthFrame = pd.DataFrame(sample)
 
     synthFrame = pd.DataFrame(sample)
 
@@ -122,7 +147,7 @@ def synthesize(
     )
     curs.execute(createTableQuery)
 
-    populateAnonFromDF(curs, synthFrame, anonTableName)
+    populateAnonFromDF(curs, synthFrame, anonTableName, timestampIndexes)
 
     curs.close()
     conn.close()
