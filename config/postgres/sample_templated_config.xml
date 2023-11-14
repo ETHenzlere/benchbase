@@ -12,13 +12,14 @@
 
     <anon>
         <anonTable>
-            <tablename>new_order</tablename>
-            <droppable>no_w_id</droppable>
-            <categorical>no_d_id,no_o_id</categorical>
+            <tablename>shopping</tablename>
+            <droppable>customer</droppable>
+            <categorical></categorical>
             <continuous></continuous>
             <ordinal></ordinal>
             <eps>1.0</eps>
             <preEps>0.5</preEps>
+            <algorithm>dpctgan</algorithm>
         </anonTable>
     </anon>
     

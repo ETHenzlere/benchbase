@@ -29,7 +29,6 @@ public class GenericQueryOperation extends Operation {
 
     public final List<Object> params;
 
-
     public GenericQueryOperation(Object[] params) {
         super();
         this.params = Collections.unmodifiableList(Arrays.asList(params));

@@ -186,47 +186,27 @@ public class DBWorkload {
             if (numTables > 0) {
                 LOG.info("Starting the Anonymization process");
                 LOG.info(SINGLE_LINE);
-                // Connection Details
-                String driver = xmlConfig.getString("driver");
-                String url = xmlConfig.getString("url");
-                String username = xmlConfig.getString("username");
-                String password = xmlConfig.getString("password");
 
-                for (int i = 1; i < numTables + 1; i++) {
-                    final HierarchicalConfiguration<ImmutableNode> anonConfig = xmlConfig
-                            .configurationAt("anon/anonTable[" + i + "]");
+                ProcessBuilder processBuilder = new ProcessBuilder("python3",
+                        "scripts/anonymizer.py", configFile);
 
-                    // Anonymization details
-                    String eps = anonConfig.getString("eps", "1.0");
-                    String preprocessorEps = anonConfig.getString("preEps", "0.5");
-                    String tablename = anonConfig.getString("tablename");
-                    String droppableColumns = anonConfig.getString("droppable", "");
-                    String categoricalColumns = anonConfig.getString("categorical", "");
-                    String continuousColumns = anonConfig.getString("continuous", "");
-                    String ordinalColumns = anonConfig.getString("ordinal", "");
+                try {
+                    // Redirect Output stream of the Script to get live feedback
+                    processBuilder.inheritIO();
 
-                    ProcessBuilder processBuilder = new ProcessBuilder("python3",
-                            "scripts/anonymizer.py", driver, url, username, password, eps, preprocessorEps, tablename,
-                            droppableColumns, categoricalColumns, continuousColumns, ordinalColumns);
+                    Process process = processBuilder.start();
 
-                    try {
-                        // Redirect Output stream of the Script to get live feedback
-                        processBuilder.inheritIO();
-
-                        Process process = processBuilder.start();
-
-                        int exitCode = process.waitFor();
-                        if (exitCode != 0) {
-                            throw new Exception("Program exited with a non-zero status code");
-                        }
-
-                        LOG.info("Finished the Anonymization process for Table: " + tablename);
-                        LOG.info(SINGLE_LINE);
-
-                    } catch (Exception e) {
-                        LOG.error(e.getMessage());
-                        return;
+                    int exitCode = process.waitFor();
+                    if (exitCode != 0) {
+                        throw new Exception("Program exited with a non-zero status code");
                     }
+
+                    LOG.info("Finished the Anonymization process for all tables");
+                    LOG.info(SINGLE_LINE);
+
+                } catch (Exception e) {
+                    LOG.error(e.getMessage());
+                    return;
                 }
             }
 

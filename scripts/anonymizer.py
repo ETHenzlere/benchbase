@@ -1,14 +1,67 @@
+"""Module that handles the full Anonymization pipeline
+"""
+import sys
+import jpype
 import jaydebeapi
 import pandas as pd
 from snsynth import Synthesizer
-import sys
+from faker import Faker
 import numpy as np
-import jpype
-from jpype.types import *
-import jpype.imports
+import xml.etree.ElementTree as ET
+
+
+def fakeColumn(dataset, col, locales, method, seed=0):
+    """Method that generates fake values for columns that are considered sensitive
+
+    Args:
+        dataset (DataFrame): A Pandas dataframe holding anonymized data
+        col (str): The name of the column
+        locales (str[]): A list of locales
+        method (str): A string matching the desired faker method
+        seed (int, optional): Seed for the fake values. Defaults to 0.
+
+    Returns:
+        dict: Mapping from original to fake values
+    """
+    fake = Faker(locales)
+
+    fake.seed_instance(seed)
+
+    sensDict = {}
+
+    dataset[col] = dataset[col].astype(str)
+
+    try:
+        fakerFunc = getattr(fake.unique, method)
+        exists = True
+    except AttributeError:
+        exists = False
+        print("Faker method '" + method + "' not found. Resorting to random String")
+        fakerFunc = fake.unique.pystr
+
+    for val in dataset[col].unique():
+        if exists:
+            sensDict[val] = fakerFunc()
+        else:
+            maxLen = len(val)
+            sensDict[val] = fakerFunc(min_chars=1, max_chars=maxLen)
+
+    dataset[col] = dataset[col].map(sensDict)
+
+    fake.unique.clear()
+
+    return dataset, sensDict
 
 
 def getTimestampColumns(dbTypeList):
+    """A helper function that returns a list of indexes of timestamp-type columns
+
+    Args:
+        dbTypeList (any): A list of Database column metadata
+
+    Returns:
+        int[]: A list of indexes of timestamp-type columns
+    """
     timestampIndexes = []
     for i, entry in enumerate(dbTypeList):
         for dType in entry.values:
@@ -17,12 +70,17 @@ def getTimestampColumns(dbTypeList):
     return timestampIndexes
 
 
-def splitString(longString):
-    return [] if longString == "-1" else [i for i in longString.split(",")]
-
-
 def dfFromTable(curs, table):
-    curs.execute("SELECT * FROM {0}".format(table))
+    """Helper function that creates a pandas DataFrame from a jaydebe connection
+
+    Args:
+        curs (cursor): The connection cursor
+        table (str): The name of the table
+
+    Returns:
+        Dataframe,string[]: The table as a DataFrame and the indexes of timestamp columns
+    """
+    curs.execute(f"SELECT * FROM {table}")
 
     res = curs.fetchall()
     meta = curs.description
@@ -40,6 +98,14 @@ def dfFromTable(curs, table):
 
 
 def populateAnonFromDF(curs, df, table, timestampIndexes):
+    """Helper function to fill a DB table from a DataFrame
+
+    Args:
+        curs (cursor): The connection cursor
+        df (DataFrame): Pandas DataFrame
+        table (string): The name of the table
+        timestampIndexes (int[]): A list of indexes of timestamp-type columns
+    """
     df = df.replace(np.nan, None)
 
     for ind in timestampIndexes:
@@ -51,18 +117,27 @@ def populateAnonFromDF(curs, df, table, timestampIndexes):
     if len(timestampIndexes):
         import java
 
-        for i in range(0, len(tuples)):
-            li = list(tuples[i])
+        for i, tup in enumerate(tuples):
+            li = list(tup)
             for j in timestampIndexes:
                 li[j] = java.sql.Timestamp @ li[j]
             tuples[i] = tuple(li)
 
-    colSlots = "({0})".format(",".join("?" for col in df.columns))
-    insertSQL = "insert into {0} values {1}".format(table, colSlots)
+    colSlots = f"({','.join('?' for _ in df.columns)})"
+    insertSQL = f"insert into {table} values {colSlots}"
     curs.executemany(insertSQL, tuples)
 
 
 def getDroppableInfo(dropCols, dataset):
+    """Helper function that saves droppable columns from anonymization
+
+    Args:
+        dropCols (str[]): A list of column names
+        dataset (DataFrame): The dataset
+
+    Returns:
+        DataFrame,int[]: The saved columns as a DataFrame and a list of the original indexes of the columns
+    """
     savedColumns = dataset[dropCols]
     savedColumnsIndexes = []
 
@@ -71,40 +146,27 @@ def getDroppableInfo(dropCols, dataset):
     return savedColumns, savedColumnsIndexes
 
 
-def synthesize(
-    driver,
-    url,
-    username,
-    password,
-    eps,
-    preEps,
-    table,
-    dropCols,
-    categorical,
-    continuous,
-    ordinal,
-):
-    jpype.startJVM(classpath=["benchbase.jar"])
-
-    conn = jaydebeapi.connect(driver, url, [username, password])
-
-    curs = conn.cursor()
-
-    dataset, timestampIndexes = dfFromTable(curs, table)
-
+def anonymize(dataset: str, anonConfig: dict, sensConfig: dict):
+    dropCols = anonConfig["hide"]
+    alg = anonConfig["alg"]
+    eps = float(anonConfig["eps"])
+    preEps = float(anonConfig["preEps"])
+    cat = anonConfig["cat"]
+    cont = anonConfig["cont"]
+    ordi = anonConfig["ord"]
     savedColumns = []
     savedColumnsIndexes = []
+
     if dropCols:
         savedColumns, savedColumnsIndexes = getDroppableInfo(dropCols, dataset)
         dataset = dataset.drop(dropCols, axis=1)
 
     nullableFlag = dataset.isnull().values.any()
 
+    synth = Synthesizer.create(alg, epsilon=eps, verbose=True)
     synthFrame = pd.DataFrame()
 
-    synth = Synthesizer.create("mst", epsilon=eps, verbose=True)
-
-    if len(categorical) == 0 and len(continuous) == 0 and len(ordinal) == 0:
+    if len(cat) == 0 and len(cont) == 0 and len(ordi) == 0:
         sample = synth.fit_sample(
             dataset,
             preprocessor_eps=preEps,
@@ -115,95 +177,119 @@ def synthesize(
         sample = synth.fit_sample(
             dataset,
             preprocessor_eps=preEps,
-            categorical_columns=categorical,
-            continuous_columns=continuous,
-            ordinal_columns=ordinal,
+            categorical_columns=cat,
+            continuous_columns=cont,
+            ordinal_columns=ordi,
             nullable=nullableFlag,
         )
         synthFrame = pd.DataFrame(sample)
 
-    synthFrame = pd.DataFrame(sample)
+    if sensConfig:
+        for sensCol in sensConfig["cols"]:
+            synthFrame, _ = fakeColumn(
+                synthFrame,
+                sensCol["name"],
+                sensCol["locales"],
+                sensCol["method"],
+                int(sensConfig["seed"]),
+            )
 
     # Stitching the Frame back to its original form
     if dropCols:
-        for ind in range(len(dropCols)):
-            columnName = dropCols[ind]
-            synthFrame.insert(
-                savedColumnsIndexes[ind], columnName, savedColumns[columnName]
-            )
+        for ind, col in enumerate(dropCols):
+            synthFrame.insert(savedColumnsIndexes[ind], col, savedColumns[col])
 
-    print(synthFrame.describe(include="all"))
+    return synthFrame
+
+
+def anonymizeDB(jdbcConfig: dict, anonConfig: dict, sensConfig: dict):
+    driver = jdbcConfig["driver"]
+    url = jdbcConfig["url"]
+    username = jdbcConfig["username"]
+    password = jdbcConfig["password"]
+    jar = "benchbase.jar"
+
+    jpype.startJVM(classpath=[jar])
+
+    conn = jaydebeapi.connect(driver, url, [username, password])
+
+    curs = conn.cursor()
+    table = anonConfig["table"]
+    dataset, timestampIndexes = dfFromTable(curs, table)
+
+    datasetAnon = anonymize(dataset, anonConfig, sensConfig)
 
     # Create empty table called ANON
     anonTableName = table + "_anonymized"
-    try:
-        curs.execute("drop table {0}".format(anonTableName))
-        print("Dropped old Anonymized table. Creating new table")
-    except:
-        print("No Anonymized table found. Creating new table")
 
-    createTableQuery = "CREATE TABLE {0} AS TABLE {1} WITH NO DATA".format(
-        anonTableName, table
-    )
+    curs.execute(f"DROP TABLE IF EXISTS {anonTableName}")
+
+    createTableQuery = f"CREATE TABLE {anonTableName} AS TABLE {table} WITH NO DATA"
     curs.execute(createTableQuery)
-
-    populateAnonFromDF(curs, synthFrame, anonTableName, timestampIndexes)
-
+    populateAnonFromDF(curs, datasetAnon, anonTableName, timestampIndexes)
     curs.close()
     conn.close()
 
 
+def listFromString(string):
+    if string:
+        return list(string.split(","))
+    else:
+        return []
+
+
+def configFromXML(path):
+    tree = ET.parse(path)
+    parameters = tree.getroot()
+    jdbcConfig = {
+        "driver": parameters.find("driver").text,
+        "url": parameters.find("url").text,
+        "username": parameters.find("username").text,
+        "password": parameters.find("password").text,
+    }
+    anonConfig = {}
+    sensConfig = {}
+
+    anon = parameters.find("anon")
+
+    for table in anon.findall("anonTable"):
+        anonConfig["table"] = table.find("tablename").text
+        anonConfig["hide"] = listFromString(table.find("droppable").text)
+        anonConfig["cat"] = listFromString(table.find("categorical").text)
+        anonConfig["cont"] = listFromString(table.find("continuous").text)
+        anonConfig["ord"] = listFromString(table.find("ordinal").text)
+        anonConfig["eps"] = table.find("eps").text
+        anonConfig["preEps"] = table.find("preEps").text
+        anonConfig["alg"] = table.find("algorithm").text
+
+    sens = parameters.find("sensitive")
+
+    if sens:
+        sensConfig["seed"] = sens.get("seed", 0)
+        sensList = []
+        for sensCol in sens.findall("colName"):
+            sensList.insert(
+                {
+                    "name": sensCol.text,
+                    "method": sensCol.get("method"),
+                    "locales": sensCol.get("locales"),
+                }
+            )
+        sens["cols"] = sensList
+
+    return jdbcConfig, anonConfig, sensConfig
+
+
 def main():
-    if len(sys.argv) < 8:
-        print(
-            "Not enough arguments provided: <driver> <url> <username> <password> <eps> <preprocessorEps> <table> <dropColumns> <categoricalColumns> <continuousColumns> <ordinalColumns>"
-        )
+    """Entry method"""
+    if len(sys.argv) < 2:
+        print("Not enough arguments provided: <configPath>")
         return
 
-    driver = sys.argv[1]
+    confPath = sys.argv[1]
 
-    url = sys.argv[2]
-
-    username = sys.argv[3]
-
-    pw = sys.argv[4]
-
-    eps = float(sys.argv[5])
-
-    preprocEps = float(sys.argv[6])
-
-    table = sys.argv[7]
-
-    saveList = sys.argv[8]
-
-    columnsToSave = splitString(saveList)
-
-    catList = sys.argv[9]
-    categorical = splitString(catList)
-
-    contList = sys.argv[10]
-    continuous = splitString(contList)
-
-    ordList = sys.argv[11]
-    ordinal = splitString(ordList)
-
-    print("The following columns will be saved: ")
-    print(columnsToSave)
-
-    synthesize(
-        driver,
-        url,
-        username,
-        pw,
-        eps,
-        preprocEps,
-        table,
-        columnsToSave,
-        categorical,
-        continuous,
-        ordinal,
-    )
-    return
+    jdbcConfig, anonConfig, sensConfig = configFromXML(confPath)
+    anonymizeDB(jdbcConfig, anonConfig, sensConfig)
 
 
 if __name__ == "__main__":
