@@ -10,6 +10,20 @@ import numpy as np
 import xml.etree.ElementTree as ET
 
 
+def rewriteFakeQueries(fakeValues, path):
+    tree = ET.parse(path)
+    templates = tree.getroot()
+    for fakerDict in fakeValues:
+        for key in fakerDict:
+            for tag in templates.iter("value"):
+                if tag.text == key:
+                    print("FOUND. REPLACING: " + tag.text)
+                    tag.text = fakerDict[key]
+    print("Query templates rewritten for sensitive values")
+    # ET.indent(templates)
+    tree.write(path)
+
+
 def fakeColumn(dataset, col, locales, method, seed=0):
     """Method that generates fake values for columns that are considered sensitive
 
@@ -146,7 +160,7 @@ def getDroppableInfo(dropCols, dataset):
     return savedColumns, savedColumnsIndexes
 
 
-def anonymize(dataset: str, anonConfig: dict, sensConfig: dict):
+def anonymize(dataset: str, anonConfig: dict, sensConfig: dict, templatesPath: str):
     dropCols = anonConfig["hide"]
     alg = anonConfig["alg"]
     eps = float(anonConfig["eps"])
@@ -184,25 +198,30 @@ def anonymize(dataset: str, anonConfig: dict, sensConfig: dict):
         )
         synthFrame = pd.DataFrame(sample)
 
+    # Stitching the Frame back to its original form
+    if dropCols:
+        for ind, col in enumerate(dropCols):
+            synthFrame.insert(savedColumnsIndexes[ind], col, savedColumns[col])
+
     if sensConfig:
+        fakerList = []
         for sensCol in sensConfig["cols"]:
-            synthFrame, _ = fakeColumn(
+            synthFrame, values = fakeColumn(
                 synthFrame,
                 sensCol["name"],
                 sensCol["locales"],
                 sensCol["method"],
                 int(sensConfig["seed"]),
             )
-
-    # Stitching the Frame back to its original form
-    if dropCols:
-        for ind, col in enumerate(dropCols):
-            synthFrame.insert(savedColumnsIndexes[ind], col, savedColumns[col])
+            fakerList.append(values)
+        rewriteFakeQueries(fakerList, templatesPath)
 
     return synthFrame
 
 
-def anonymizeDB(jdbcConfig: dict, anonConfig: dict, sensConfig: dict):
+def anonymizeDB(
+    jdbcConfig: dict, anonConfig: dict, sensConfig: dict, templatesPath: str
+):
     driver = jdbcConfig["driver"]
     url = jdbcConfig["url"]
     username = jdbcConfig["username"]
@@ -217,7 +236,7 @@ def anonymizeDB(jdbcConfig: dict, anonConfig: dict, sensConfig: dict):
     table = anonConfig["table"]
     dataset, timestampIndexes = dfFromTable(curs, table)
 
-    datasetAnon = anonymize(dataset, anonConfig, sensConfig)
+    datasetAnon = anonymize(dataset, anonConfig, sensConfig, templatesPath)
 
     # Create empty table called ANON
     anonTableName = table + "_anonymized"
@@ -268,28 +287,34 @@ def configFromXML(path):
         sensConfig["seed"] = sens.get("seed", 0)
         sensList = []
         for sensCol in sens.findall("colName"):
-            sensList.insert(
+            sensList.append(
                 {
                     "name": sensCol.text,
                     "method": sensCol.get("method"),
                     "locales": sensCol.get("locales"),
                 }
             )
-        sens["cols"] = sensList
+        sensConfig["cols"] = sensList
 
     return jdbcConfig, anonConfig, sensConfig
 
 
 def main():
     """Entry method"""
-    if len(sys.argv) < 2:
-        print("Not enough arguments provided: <configPath>")
+    if len(sys.argv) == 2:
+        confPath = sys.argv[1]
+        templatesPath = ""
+
+    elif len(sys.argv) == 3:
+        confPath = sys.argv[1]
+        templatesPath = sys.argv[2]
+
+    else:
+        print("Not enough arguments provided: <configPath> <templatesPath (optional)>")
         return
 
-    confPath = sys.argv[1]
-
     jdbcConfig, anonConfig, sensConfig = configFromXML(confPath)
-    anonymizeDB(jdbcConfig, anonConfig, sensConfig)
+    anonymizeDB(jdbcConfig, anonConfig, sensConfig, templatesPath)
 
 
 if __name__ == "__main__":

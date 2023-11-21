@@ -22,6 +22,10 @@
             <algorithm>dpctgan</algorithm>
         </anonTable>
     </anon>
+
+    <sensitive seed="0">
+        <colName method="prefix" locales="en_US">gender</colName>
+    </sensitive>
     
     <query_templates_file>data/templated/example.xml</query_templates_file>
 

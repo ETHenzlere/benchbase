@@ -183,12 +183,17 @@ public class DBWorkload {
             // ANONYMIZATION
             // ----------------------------------------------------------------
             int numTables = xmlConfig.configurationsAt("/anon/anonTable").size();
+            String templatesPath = "";
+            if (xmlConfig.containsKey("query_templates_file")) {
+                templatesPath = xmlConfig.getString("query_templates_file");
+            }
+
             if (numTables > 0) {
                 LOG.info("Starting the Anonymization process");
                 LOG.info(SINGLE_LINE);
 
                 ProcessBuilder processBuilder = new ProcessBuilder("python3",
-                        "scripts/anonymizer.py", configFile);
+                        "scripts/anonymizer.py", configFile, templatesPath);
 
                 try {
                     // Redirect Output stream of the Script to get live feedback
