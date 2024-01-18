@@ -61,4 +61,45 @@
          <value>11</value>
       </values>
    </template>
+    <template name="UpdateItemPrice">
+      <query><![CDATA[UPDATE item SET i_price = i_price + 1 WHERE i_price < ?]]></query>
+      <types>
+         <type>FLOAT</type>
+      </types>
+      <values>
+         <value>2.1</value>
+      </values>
+   </template>
+   <template name="DeleteItem">
+      <query><![CDATA[DELETE FROM item WHERE i_price > ?]]></query>
+      <types>
+         <type>FLOAT</type>
+      </types>
+      <values>
+         <value>255.0</value>
+      </values>
+   </template>
+   <template name="InsertItem">
+      <query><![CDATA[INSERT INTO history VALUES(?,?,?,?,?,?,?,?)]]></query>
+      <types>
+         <type>INTEGER</type>
+         <type>INTEGER</type>
+         <type>INTEGER</type>
+         <type>INTEGER</type>
+         <type>INTEGER</type>
+         <type>TIMESTAMP</type>
+         <type>FLOAT</type>
+         <type>VARCHAR</type>
+      </types>
+      <values>
+         <value>1</value>
+         <value>1</value>
+         <value>1</value>
+         <value>1</value>
+         <value>1</value>
+         <value>2022-10-10 11:30:30</value>
+         <value>1.0</value>
+         <value>Test</value>
+      </values>
+   </template>
 </templates>
