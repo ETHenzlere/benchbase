@@ -211,7 +211,7 @@ def anonymize(dataset: str, anonConfig: dict, sensConfig: dict, templatesPath: s
                 sensCol["name"],
                 sensCol["locales"],
                 sensCol["method"],
-                int(sensConfig["seed"]),
+                int(sensCol["seed"]),
             )
             fakerList.append(values)
         rewriteFakeQueries(fakerList, templatesPath)
@@ -281,20 +281,23 @@ def configFromXML(path):
         anonConfig["preEps"] = table.find("preEps").text
         anonConfig["alg"] = table.find("algorithm").text
 
-    sens = parameters.find("sensitive")
+        sens = table.find("sensitive")
+        if sens:
+            sensList = []
+            for sensCol in sens.findall("colName"):
+                sensList.append(
+                    {
+                        "name": sensCol.text,
+                        "method": sensCol.get("method"),
+                        "locales": sensCol.get("locales"),
+                        "seed":sensCol.get("seed",0)
+                    }
+                )
+            sensConfig["cols"] = sensList
 
-    if sens:
-        sensConfig["seed"] = sens.get("seed", 0)
-        sensList = []
-        for sensCol in sens.findall("colName"):
-            sensList.append(
-                {
-                    "name": sensCol.text,
-                    "method": sensCol.get("method"),
-                    "locales": sensCol.get("locales"),
-                }
-            )
-        sensConfig["cols"] = sensList
+    
+
+    
 
     return jdbcConfig, anonConfig, sensConfig
 

@@ -21,13 +21,12 @@
             <eps>1.0</eps>
             <preEps>0.5</preEps>
             <algorithm>dpctgan</algorithm>
+            <sensitive>
+                <colName method="prefix" locales="en_US" seed="0">gender</colName>
+            </sensitive>
         </anonTable>
     </anon>
 
-    <sensitive seed="0">
-        <colName method="prefix" locales="en_US">gender</colName>
-    </sensitive>
-    
     <query_templates_file>data/templated/example.xml</query_templates_file>
 
     <!-- The workload -->
