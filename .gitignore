@@ -56,3 +56,6 @@ build/
 .*.swp
 
 .env
+
+# python script cache
+__pycache__/
