@@ -1,4 +1,4 @@
-import unittest
+import pytest
 import xml.etree.ElementTree as ET
 from configuration.config_parser import XML_parser
 
@@ -38,37 +38,32 @@ FULL_CONFIG = """
 """
 
 
-class TestAnonymization(unittest.TestCase):
+def test_full_config():
 
-    def test_full_config(self):
+    parameters = ET.fromstring(FULL_CONFIG)
 
-        parameters = ET.fromstring(FULL_CONFIG)
+    full_anon = parameters.find("table")
+    config_parser = XML_parser(full_anon)
+    anon_config, sens_config, cont_config = config_parser.get_config()
 
-        full_anon = parameters.find("table")
-        config_parser = XML_parser(full_anon)
-        anon_config, sens_config, cont_config = config_parser.get_config()
+    assert anon_config is not None
+    assert sens_config is not None
+    assert cont_config is not None
 
-        self.assertIsNotNone(anon_config)
-        self.assertIsNotNone(sens_config)
-        self.assertIsNotNone(cont_config)
-
-        self.assertEqual(anon_config.table_name, "item")
-        self.assertEqual(anon_config.epsilon, "1.0")
-        self.assertEqual(anon_config.preproc_eps, "0.0")
-        self.assertEqual(anon_config.algorithm, "aim")
-
-    def test_minimal_config(self):
-
-        parameters = ET.fromstring(MINIMAL_CONFIG)
-
-        only_dp_auto = parameters.find("table")
-        config_parser = XML_parser(only_dp_auto)
-        anon_config, sens_config, cont_config = config_parser.get_config()
-
-        self.assertIsNotNone(anon_config)
-        self.assertIsNone(sens_config)
-        self.assertIsNone(cont_config)
+    assert anon_config.table_name == "item"
+    assert anon_config.epsilon == "1.0"
+    assert anon_config.preproc_eps == "0.0"
+    assert anon_config.algorithm == "aim"
 
 
-if __name__ == "__main__":
-    unittest.main()
+def test_minimal_config():
+
+    parameters = ET.fromstring(MINIMAL_CONFIG)
+
+    only_dp_auto = parameters.find("table")
+    config_parser = XML_parser(only_dp_auto)
+    anon_config, sens_config, cont_config = config_parser.get_config()
+
+    assert anon_config is not None
+    assert sens_config is None
+    assert cont_config is None
